@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="root@10.245.142.110:50031 password (2)" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" autoUpload="Always" serverName="root@10.245.142.110:50031 password" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
-      <paths name="root@10.245.142.110:50031 password (2)">
+      <paths name="myServer">
         <serverdata>
           <mappings>
             <mapping deploy="/work_dir/wang_Work/GDPNet-main" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="root@10.245.142.110:50031 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/root/work_dir/wang_Work/GDPNet-main" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

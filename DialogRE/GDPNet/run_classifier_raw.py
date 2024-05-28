@@ -1,3 +1,4 @@
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -34,7 +35,7 @@ torch.cuda.set_device(0)
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
 
-    def __init__(self, guid, text_a, text_b=None, label=None, text_c=None, r=None):
+    def __init__(self, guid, text_a, text_b=None, label=None, text_c=None):
         """Constructs a InputExample.
 
         Args:
@@ -51,21 +52,16 @@ class InputExample(object):
         self.text_b = text_b
         self.text_c = text_c
         self.label = label
-        self.r = r
 
 
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids, input_mask, segment_ids, label_id,
-                 input_truelabel_ids=None,attention_mask_truelabel=None,token_type_ids_truelabel=None):
+    def __init__(self, input_ids, input_mask, segment_ids, label_id):
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.label_id = label_id
-        self.input_ids_label = input_truelabel_ids
-        self.input_mask_label = attention_mask_truelabel
-        self.segment_ids_label = token_type_ids_truelabel
 
 
 class DataProcessor(object):
@@ -244,8 +240,6 @@ class bertsProcessor(DataProcessor): #bert_s
                 random.shuffle(data)
             for i in range(len(data)):
                 for j in range(len(data[i][1])):
-                    # print(str(data[i][1]))
-                    # [{'y': 'Honey', 'x': 'Speaker 1', 'rid': [37], 'r': ['unanswerable'], 't': [''], 'x_type': 'PER', 'y_type': 'STRING'}, {'y': 'Rach', 'x': 'Speaker 1', 'rid': [30], 'r': ['per:alternate_names'], 't': [''], 'x_type': 'PER', 'y_type': 'PER'}, {'y': 'honey', 'x': 'Speaker 3', 'rid': [30], 'r': ['per:alternate_names'], 't': [''], 'x_type': 'PER', 'y_type': 'STRING'}]
                     rid = []
                     for k in range(36):
                         if k+1 in data[i][1][j]["rid"]:
@@ -253,13 +247,10 @@ class bertsProcessor(DataProcessor): #bert_s
                         else:
                             rid += [0]
                     d, h, t = rename('\n'.join(data[i][0]).lower(), data[i][1][j]["x"].lower(), data[i][1][j]["y"].lower())
-                    r = data[i][1][j]["r"]  # 这是一个列表[]  'r': ['unanswerable']
-                    # print(r)
                     d = [d,
                          h,
                          t,
-                         rid,
-                         r]
+                         rid]
                     self.D[sid] += [d]
         logger.info(str(len(self.D[0])) + "," + str(len(self.D[1])) + "," + str(len(self.D[2])))
 
@@ -290,11 +281,7 @@ class bertsProcessor(DataProcessor): #bert_s
             text_a = tokenization.convert_to_unicode(data[i][0])
             text_b = tokenization.convert_to_unicode(data[i][1])
             text_c = tokenization.convert_to_unicode(data[i][2])
-            relation = []
-            for r in data[i][4]:
-                res = tokenization.convert_to_unicode(r)
-                relation.append(res)
-            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=data[i][3], text_c=text_c, r=relation))
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=data[i][3], text_c=text_c))
 
         return examples
 
@@ -343,13 +330,10 @@ class bertsf1cProcessor(DataProcessor): #bert_s (conversational f1)
                             rid += [0]
                     for l in range(1, len(data[i][0])+1):
                         d, h, t = rename('\n'.join(data[i][0][:l]).lower(), data[i][1][j]["x"].lower(), data[i][1][j]["y"].lower())
-                        r = data[i][1][j]["r"]  # 这是一个列表[]  'r': ['unanswerable']
-                        # print(r)
                         d = [d,
                              h,
                              t,
-                             rid,
-                             r]
+                             rid]
                         self.D[sid] += [d]
         logger.info(str(len(self.D[0])) + "," + str(len(self.D[1])) + "," + str(len(self.D[2])))
 
@@ -380,11 +364,7 @@ class bertsf1cProcessor(DataProcessor): #bert_s (conversational f1)
             text_a = tokenization.convert_to_unicode(data[i][0])
             text_b = tokenization.convert_to_unicode(data[i][1])
             text_c = tokenization.convert_to_unicode(data[i][2])
-            relation = []
-            for r in data[i][4]:
-                res = tokenization.convert_to_unicode(r)
-                relation.append(res)
-            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=data[i][3], text_c=text_c, r=relation))
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=data[i][3], text_c=text_c))
 
         return examples
 
@@ -421,16 +401,11 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
 
     print("#examples", len(examples))
 
-    # 构造label  现在的label不是原字符串，而是数字
     features = [[]]
     for (ex_index, example) in enumerate(examples):
-        # print("example", example)
         tokens_a = tokenize(example.text_a, tokenizer)
         tokens_b = tokenize(example.text_b, tokenizer)
         tokens_c = tokenize(example.text_c, tokenizer)
-        r = []
-        for rel in example.r:
-            r.append(tokenize(rel, tokenizer))
 
         _truncate_seq_tuple(tokens_a, tokens_b, tokens_c, max_seq_length - 4)
         tokens_b = tokens_b + ["[SEP]"] + tokens_c
@@ -450,7 +425,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
             segment_ids.append(1)
         tokens.append("[SEP]")
         segment_ids.append(1)
-        # print("tokens",type(tokens))
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
 
@@ -458,58 +432,19 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         # tokens are attended to.
         input_mask = [1] * len(input_ids)
 
-
-
-        label_inputs = []
-        token_type_ids_truelabel = []
-        label_inputs.append("[CLS]")
-        token_type_ids_truelabel.append(0)
-        i = 0
-        for rel in r:
-            if i % 2 == 0:
-                for rel1 in rel:
-                    if rel1 == ':':
-                        continue
-                    label_inputs.append(rel1)
-                    token_type_ids_truelabel.append(0)
-                label_inputs.append("[SEP]")
-                token_type_ids_truelabel.append(0)
-            else:
-                for rel2 in rel:
-                    if rel2 == ':':
-                        continue
-                    label_inputs.append(rel2)
-                    token_type_ids_truelabel.append(1)
-                label_inputs.append("[SEP]")
-                token_type_ids_truelabel.append(1)
-            i += 1
-        # print("label_inputs", type(label_inputs))
-        input_truelabel_ids = tokenizer.convert_tokens_to_ids(label_inputs)
-        attention_mask_truelabel = [1] * len(input_truelabel_ids)
-
         # Zero-pad up to the sequence length.
         while len(input_ids) < max_seq_length:
             input_ids.append(0)
             input_mask.append(0)
             segment_ids.append(0)
 
-        while len(input_truelabel_ids) < max_seq_length:
-            input_truelabel_ids.append(0)
-            attention_mask_truelabel.append(0)
-            token_type_ids_truelabel.append(0)
-
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
-        assert len(input_truelabel_ids) == max_seq_length
-        assert len(attention_mask_truelabel) == max_seq_length
-        assert len(token_type_ids_truelabel) == max_seq_length
 
-        # 对应第label_id个关系
         label_id = example.label
-        # print("label_id: ",label_id)
 
-        if ex_index < 1:
+        if ex_index < 5:
             logger.info("*** Example ***")
             logger.info("guid: %s" % (example.guid))
             logger.info("tokens: %s" % " ".join(
@@ -518,22 +453,13 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
             logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
             logger.info(
                     "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-            logger.info("label_id: %s" % " ".join([str(x) for x in label_id]))
-            logger.info("input_truelabel_ids: %s" % " ".join([str(x) for x in input_truelabel_ids]))
-            logger.info("attention_mask_truelabel: %s" % " ".join([str(x) for x in attention_mask_truelabel]))
-            logger.info(
-                "token_type_ids_truelabel: %s" % " ".join([str(x) for x in token_type_ids_truelabel]))
-
 
         features[-1].append(
                 InputFeatures(
                         input_ids=input_ids,
                         input_mask=input_mask,
                         segment_ids=segment_ids,
-                        label_id=label_id,
-                        input_truelabel_ids=input_truelabel_ids,
-                        attention_mask_truelabel=attention_mask_truelabel,
-                        token_type_ids_truelabel=token_type_ids_truelabel))
+                        label_id=label_id))
         if len(features[-1]) == n_class:
             features.append([])
 
@@ -753,7 +679,7 @@ def main():
                         help="random seed for initialization")
 
 
-    parser.add_argument('--pooling_ratio', type=float, default=0.5,
+    parser.add_argument('--pooling_ratio', type=float, default=0.3,
                         help='pooling ratio')
     parser.add_argument('--pool_dropout_ratio', type=float, default=0.5,
                         help='dropout ratio')
@@ -768,15 +694,14 @@ def main():
                         help='Dropout rate for word representation.')
     parser.add_argument('--num_graph_layers',
                         type=int,
-                        default=1,
+                        default=2,
                         help="Number of blocks for graph")
     parser.add_argument('--heads', type=int, default=3, help='Num of heads in multi-head attention.')
     parser.add_argument('--sublayer_first', type=int, default=2, help='Num of the first sublayers in dcgcn block.')
     parser.add_argument('--sublayer_second', type=int, default=4, help='Num of the second sublayers in dcgcn block.')
     parser.add_argument('--gcn_dropout', type=float, default=0.5, help='AGGCN layer dropout rate.')
     parser.add_argument('--lamada', type=float, default=0.000001, help='Weights for DTW Loss.')
-    parser.add_argument('--label_lamda', type=float, default=0.25, help='Weights for Label Feature Loss.')
-    parser.add_argument('--cls_label_lamda', type=float, default=0.25, help='Weights for CLS_Label Feature Loss.')
+    parser.add_argument('--lamada_label', type=float, default=0.000001, help='Weights for Label Feature Loss.')
     parser.add_argument('--max_offset', type=int, default=4, help='Length of max_offset.')
 
 
@@ -961,36 +886,23 @@ def main():
         input_mask = []
         segment_ids = []
         label_id = []
-        input_ids_label = []
-        input_mask_label = []
-        segment_ids_label = []
-        # 获取 label_input
+        # todo: add label_input
         for f in train_features:
             input_ids.append([])
             input_mask.append([])
             segment_ids.append([])
-            input_ids_label.append([])
-            input_mask_label.append([])
-            segment_ids_label.append([])
             for i in range(n_class):
                 input_ids[-1].append(f[i].input_ids)
                 input_mask[-1].append(f[i].input_mask)
                 segment_ids[-1].append(f[i].segment_ids)
-                input_ids_label[-1].append(f[i].input_ids_label)
-                input_mask_label[-1].append(f[i].input_mask_label)
-                segment_ids_label[-1].append(f[i].segment_ids_label)
             label_id.append([f[0].label_id])
 
         all_input_ids = torch.tensor(input_ids, dtype=torch.long)
         all_input_mask = torch.tensor(input_mask, dtype=torch.long)
         all_segment_ids = torch.tensor(segment_ids, dtype=torch.long)
         all_label_ids = torch.tensor(label_id, dtype=torch.float)
-        all_input_ids_label = torch.tensor(input_ids_label, dtype=torch.long)
-        all_input_mask_label = torch.tensor(input_mask_label, dtype=torch.long)
-        all_segment_ids_label = torch.tensor(segment_ids_label, dtype=torch.long)
 
-        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids,
-                                   all_input_ids_label, all_input_mask_label, all_segment_ids_label)
+        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
         ################################
         if args.local_rank == -1:
             train_sampler = RandomSampler(train_data)
@@ -1004,10 +916,9 @@ def main():
             nb_tr_examples, nb_tr_steps = 0, 0
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", ncols=100)):
                 batch = tuple(t.to(device) for t in batch)
-                # adjust label_input
-                input_ids, input_mask, segment_ids, label_ids, input_ids_label, input_mask_label, segment_ids_label = batch
-                loss, _ = model(input_ids, segment_ids, input_mask, label_ids, 1,
-                                input_ids_label, input_mask_label, segment_ids_label)
+                # todo: adjust label_input
+                input_ids, input_mask, segment_ids, label_ids = batch
+                loss, _ = model(input_ids, segment_ids, input_mask, label_ids, 1)
                 ##################################
                 if n_gpu > 1:
                     loss = loss.mean()
