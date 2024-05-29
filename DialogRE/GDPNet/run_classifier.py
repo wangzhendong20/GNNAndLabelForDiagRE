@@ -768,11 +768,11 @@ def main():
                         help='Dropout rate for word representation.')
     parser.add_argument('--num_graph_layers',
                         type=int,
-                        default=1,
+                        default=2,
                         help="Number of blocks for graph")
     parser.add_argument('--heads', type=int, default=3, help='Num of heads in multi-head attention.')
     parser.add_argument('--sublayer_first', type=int, default=2, help='Num of the first sublayers in dcgcn block.')
-    parser.add_argument('--sublayer_second', type=int, default=2, help='Num of the second sublayers in dcgcn block.')
+    parser.add_argument('--sublayer_second', type=int, default=4, help='Num of the second sublayers in dcgcn block.')
     parser.add_argument('--gcn_dropout', type=float, default=0.5, help='AGGCN layer dropout rate.')
     parser.add_argument('--lamada', type=float, default=0.000001, help='Weights for DTW Loss.')
     parser.add_argument('--label_lamda', type=float, default=0.25, help='Weights for Label Feature Loss.')
@@ -877,7 +877,7 @@ def main():
         num_train_steps = int(
             len(train_examples) / n_class / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
 
-    # todo: add label-aware to this model
+    # add label-aware to this model
     model = BertForSequenceClassification(bert_config, 1, args)
     ################################
     if args.init_checkpoint is not None:
@@ -1006,10 +1006,10 @@ def main():
             tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", ncols=60)):
-                optimizer.zero_grad()
                 batch = tuple(t.to(device) for t in batch)
                 # adjust label_input
                 input_ids, input_mask, segment_ids, label_ids, input_ids_label, input_mask_label, segment_ids_label = batch
+
                 loss, _ = model(input_ids, segment_ids, input_mask, label_ids, 1,
                                 input_ids_label, input_mask_label, segment_ids_label)
                 ##################################
@@ -1026,6 +1026,10 @@ def main():
                 nb_tr_examples += input_ids.size(0)
                 nb_tr_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
+                    if (step + 1) % 300 == 0:
+                        loss_avg = tr_loss / nb_tr_steps
+                        tqdm.write("Step {}, Loss: {:.4f}".format(global_step, loss_avg))
+                    # logger.info("Step %d, Loss: %.4f", global_step, loss_avg)
                     if args.fp16 or args.optimize_on_cpu:
                         if args.fp16 and args.loss_scale != 1.0:
                             # scale down gradients for fp16 training
