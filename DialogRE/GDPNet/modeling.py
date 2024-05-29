@@ -655,7 +655,7 @@ class PoolGCN(nn.Module):
                 self.layers.append(MultiGraphConvLayer(args, self.mem_dim, self.sublayer_first, self.heads))
                 self.layers.append(MultiGraphConvLayer(args, self.mem_dim, self.sublayer_second, self.heads))
 
-        # todo: 这里需要注意一下，agg_nodes_num
+        # 这里需要注意一下，agg_nodes_num
         self.agg_nodes_num = int(((len(self.layers)+1) * self.mem_dim))
         self.aggregate_W = nn.Linear(self.agg_nodes_num, self.mem_dim)
 
@@ -668,7 +668,7 @@ class PoolGCN(nn.Module):
 
 
     def forward(self, adj, inputs, input_id, adj_label=None, inputs_label=None, input_label_id=None):
-        is_training = adj_label is not None
+        is_training = input_label_id is not None
 
         src_mask = (input_id != 0).unsqueeze(-2)
         src_mask = src_mask[:,:,:adj.size(2)]
@@ -726,15 +726,15 @@ class PoolGCN(nn.Module):
         else:
 
             for i in range(len(self.layers)):
-                attn_adj_list, outputs, src_mask_combined = self.layers[i](attn_adj_list, outputs, src_mask_combined)
+                attn_adj_list, outputs, src_mask = self.layers[i](attn_adj_list, outputs, src_mask)
                 if i == 0:
-                    src_mask_input = src_mask_combined
+                    src_mask_input = src_mask
                 layer_list.append(outputs)
 
 
             attn_tensor = self.attn(outputs, outputs, src_mask)
             attn_adj_list = [attn_adj.squeeze(1) for attn_adj in torch.split(attn_tensor, 1, dim=1)]
-            attn_adj_list, outputs, src_mask_combined = self.poolingLayer(attn_adj_list, outputs, src_mask)
+            attn_adj_list, outputs, src_mask = self.poolingLayer(attn_adj_list, outputs, src_mask)
 
             layer_list.append(outputs)
 
@@ -798,12 +798,6 @@ class GGG(nn.Module):
             # 分割注意力图
             attn_adj_list = [attn_adj.squeeze(3) for attn_adj in torch.split(adj_multi, 1, dim=3)]
 
-            # # Mark label nodes in the adjacency list
-            # if adj_label is not None:
-            #     for batch_idx in range(B):
-            #         for node_idx in range(T_x, T_x + T_label):
-            #             attn_adj_list[batch_idx][node_idx].fill_(1.0)  # Mark label node with value 1.0
-
             return combined_new, attn_adj_list
         else:
             # 如果没有label，则保持原有逻辑处理x
@@ -837,7 +831,6 @@ class BertForSequenceClassification(nn.Module):
         self.label_classifier.append(nn.Linear(config.hidden_size, num_labels * 36))
 
         self.atten_layer = AttentionLayer(config.hidden_size)
-        self.cls_label_classifier = nn.Linear(config.hidden_size, num_labels * 36)
 
         def init_weights(module):
             if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -860,7 +853,7 @@ class BertForSequenceClassification(nn.Module):
     def forward(self, input_ids, token_type_ids, attention_mask, labels=None, n_class=1,
                 input_truelabel_ids=None,attention_mask_truelabel=None,token_type_ids_truelabel=None):
 
-        is_training = labels is not None
+        is_training = input_truelabel_ids is not None
 
         seq_length = input_ids.size(2)
         attention_mask_ = attention_mask.view(-1,seq_length)
@@ -911,26 +904,27 @@ class BertForSequenceClassification(nn.Module):
 
         output = self.dropout(torch.cat([pooled_output,h_out],dim=1))
         output = self.fc(output)
-        output = self.dropout(output) + pooled_output
+        output = self.dropout(output)
         logits = self.classifier(output)
         logits = logits.view(-1, 36)
 
 
         if is_training:
             output_cls_label, _ = self.atten_layer(pooled_output_truelabel, pooled_output)
-            logits_cls_label = self.cls_label_classifier(output_cls_label)
+            # logits_cls_label = self.cls_label_classifier(output_cls_label)
 
 
 
-        if labels is not None:  # if is_training:
+        if labels is not None:
             loss_fct = BCEWithLogitsLoss()
+            loss_MSE = torch.nn.MSELoss()
 
             labels = labels.view(-1, 36)
 
             loss = loss_fct(logits, labels)
             if is_training:
-                loss += (+ self.args.label_lamda * loss_fct(logits_label, labels)
-                         + self.args.cls_label_lamda * loss_fct(logits_cls_label, labels))
+                loss += self.args.label_lamda * loss_fct(logits_label, labels) \
+                         + self.args.cls_label_lamda * loss_MSE(output_cls_label, pooled_output_truelabel)
 
             return loss, logits
         else:

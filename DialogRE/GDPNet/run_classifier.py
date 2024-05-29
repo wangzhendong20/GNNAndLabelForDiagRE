@@ -701,7 +701,7 @@ def main():
                         action='store_true',
                         help="Whether to lower case the input text. True for uncased models, False for cased models.")
     parser.add_argument("--max_seq_length",
-                        default=128,
+                        default=512,
                         type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. \n"
                              "Sequences longer than this will be truncated, and sequences shorter \n"
@@ -715,7 +715,7 @@ def main():
                         action='store_true',
                         help="Whether to run eval on the dev set.")
     parser.add_argument("--train_batch_size",
-                        default=32,
+                        default=24,
                         type=int,
                         help="Total batch size for training.")
     parser.add_argument("--eval_batch_size",
@@ -772,17 +772,20 @@ def main():
                         help="Number of blocks for graph")
     parser.add_argument('--heads', type=int, default=3, help='Num of heads in multi-head attention.')
     parser.add_argument('--sublayer_first', type=int, default=2, help='Num of the first sublayers in dcgcn block.')
-    parser.add_argument('--sublayer_second', type=int, default=4, help='Num of the second sublayers in dcgcn block.')
+    parser.add_argument('--sublayer_second', type=int, default=2, help='Num of the second sublayers in dcgcn block.')
     parser.add_argument('--gcn_dropout', type=float, default=0.5, help='AGGCN layer dropout rate.')
     parser.add_argument('--lamada', type=float, default=0.000001, help='Weights for DTW Loss.')
     parser.add_argument('--label_lamda', type=float, default=0.25, help='Weights for Label Feature Loss.')
     parser.add_argument('--cls_label_lamda', type=float, default=0.25, help='Weights for CLS_Label Feature Loss.')
     parser.add_argument('--max_offset', type=int, default=4, help='Length of max_offset.')
-
+    parser.add_argument('--max_grad_norm',
+                        type=float,
+                        default=1.0,
+                        help='Max gradient norm for gradient clipping.')
 
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
-                        default=2,
+                        default=6,
                         help="Number of updates steps to accumualte before performing a backward/update pass.")
     parser.add_argument('--optimize_on_cpu',
                         default=False,
@@ -1002,7 +1005,8 @@ def main():
             model.train()
             tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", ncols=100)):
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", ncols=60)):
+                optimizer.zero_grad()
                 batch = tuple(t.to(device) for t in batch)
                 # adjust label_input
                 input_ids, input_mask, segment_ids, label_ids, input_ids_label, input_mask_label, segment_ids_label = batch
@@ -1033,9 +1037,11 @@ def main():
                             args.loss_scale = args.loss_scale / 2
                             model.zero_grad()
                             continue
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                         optimizer.step()
                         copy_optimizer_params_to_model(model.named_parameters(), param_optimizer)
                     else:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                         optimizer.step()
                     model.zero_grad()
                     global_step += 1
