@@ -509,20 +509,20 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         label_id = example.label
         # print("label_id: ",label_id)
 
-        if ex_index < 1:
-            logger.info("*** Example ***")
-            logger.info("guid: %s" % (example.guid))
-            logger.info("tokens: %s" % " ".join(
-                    [tokenization.printable_text(x) for x in tokens]))
-            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-            logger.info(
-                    "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-            logger.info("label_id: %s" % " ".join([str(x) for x in label_id]))
-            logger.info("input_truelabel_ids: %s" % " ".join([str(x) for x in input_truelabel_ids]))
-            logger.info("attention_mask_truelabel: %s" % " ".join([str(x) for x in attention_mask_truelabel]))
-            logger.info(
-                "token_type_ids_truelabel: %s" % " ".join([str(x) for x in token_type_ids_truelabel]))
+        # if ex_index < 1:
+        #     logger.info("*** Example ***")
+        #     logger.info("guid: %s" % (example.guid))
+        #     logger.info("tokens: %s" % " ".join(
+        #             [tokenization.printable_text(x) for x in tokens]))
+        #     logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+        #     logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+        #     logger.info(
+        #             "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+        #     logger.info("label_id: %s" % " ".join([str(x) for x in label_id]))
+        #     logger.info("input_truelabel_ids: %s" % " ".join([str(x) for x in input_truelabel_ids]))
+        #     logger.info("attention_mask_truelabel: %s" % " ".join([str(x) for x in attention_mask_truelabel]))
+        #     logger.info(
+        #         "token_type_ids_truelabel: %s" % " ".join([str(x) for x in token_type_ids_truelabel]))
 
 
         features[-1].append(
@@ -719,7 +719,7 @@ def main():
                         type=int,
                         help="Total batch size for training.")
     parser.add_argument("--eval_batch_size",
-                        default=4,
+                        default=16,
                         type=int,
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate",
@@ -749,11 +749,11 @@ def main():
                         help="local_rank for distributed training on gpus")
     parser.add_argument('--seed',
                         type=int,
-                        default=666,
+                        default=2024,
                         help="random seed for initialization")
 
 
-    parser.add_argument('--pooling_ratio', type=float, default=0.5,
+    parser.add_argument('--pooling_ratio', type=float, default=0.3,
                         help='pooling ratio')
     parser.add_argument('--pool_dropout_ratio', type=float, default=0.5,
                         help='dropout ratio')
@@ -775,13 +775,9 @@ def main():
     parser.add_argument('--sublayer_second', type=int, default=4, help='Num of the second sublayers in dcgcn block.')
     parser.add_argument('--gcn_dropout', type=float, default=0.5, help='AGGCN layer dropout rate.')
     parser.add_argument('--lamada', type=float, default=0.000001, help='Weights for DTW Loss.')
-    parser.add_argument('--label_lamda', type=float, default=0.25, help='Weights for Label Feature Loss.')
-    parser.add_argument('--cls_label_lamda', type=float, default=0.25, help='Weights for CLS_Label Feature Loss.')
+    parser.add_argument('--label_lamda', type=float, default=0.1, help='Weights for Label Feature Loss.')
+    parser.add_argument('--cls_label_lamda', type=float, default=0.1, help='Weights for CLS_Label Feature Loss.')
     parser.add_argument('--max_offset', type=int, default=4, help='Length of max_offset.')
-    parser.add_argument('--max_grad_norm',
-                        type=float,
-                        default=1.0,
-                        help='Max gradient norm for gradient clipping.')
 
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
@@ -1028,7 +1024,7 @@ def main():
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     if (step + 1) % 300 == 0:
                         loss_avg = tr_loss / nb_tr_steps
-                        tqdm.write("Step {}, Loss: {:.4f}".format(global_step, loss_avg))
+                        tqdm.write("Step {}, Loss: {:.7f}".format(global_step, loss_avg))
                     # logger.info("Step %d, Loss: %.4f", global_step, loss_avg)
                     if args.fp16 or args.optimize_on_cpu:
                         if args.fp16 and args.loss_scale != 1.0:
@@ -1041,11 +1037,11 @@ def main():
                             args.loss_scale = args.loss_scale / 2
                             model.zero_grad()
                             continue
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                        # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                         optimizer.step()
                         copy_optimizer_params_to_model(model.named_parameters(), param_optimizer)
                     else:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                        # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                         optimizer.step()
                     model.zero_grad()
                     global_step += 1

@@ -689,51 +689,102 @@ class PoolGCN(nn.Module):
             gcn_inputs_label = embs_label
             gcn_inputs_label = self.input_W_G(gcn_inputs_label)
 
-            gcn_inputs, attn_adj_list = self.GGG(gcn_inputs, adj, label=gcn_inputs_label, adj_label=adj_label)
-
+            # gcn_inputs, attn_adj_list = self.GGG(gcn_inputs, adj, label=gcn_inputs_label, adj_label=adj_label)
+            gcn_inputs, attn_adj_list, gcn_inputs_label, attn_adj_label_list = self.GGG(gcn_inputs, adj, label=gcn_inputs_label, adj_label=adj_label)
         else:
             gcn_inputs, attn_adj_list = self.GGG(gcn_inputs, adj)
 
 
 
         layer_list = []
-
         outputs = gcn_inputs
 
         if is_training:
-            src_mask_combined = torch.cat([src_mask, src_mask_label], dim=2)
 
-            # outputs :  torch.Size([1, 405, 300])
-            # attn_adj_list:  是一个List, 其中每个元素的维度都是[B, T + T_label, T + T_label]
             for i in range(len(self.layers)):
                 if i < 4:
 
-                    attn_adj_list, outputs, src_mask_combined = self.layers[i](attn_adj_list, outputs, src_mask_combined)
+                    attn_adj_list, outputs, src_mask = self.layers[i](attn_adj_list, outputs, src_mask)
                     if i==0:
-                        src_mask_input = src_mask_combined
+                        src_mask_input = src_mask
                     if i%2 !=0:
                         layer_list.append(outputs)
 
                 else:
-                    attn_tensor = self.attn(outputs, outputs, src_mask_combined)
+                    attn_tensor = self.attn(outputs, outputs, src_mask)
                     attn_adj_list = [attn_adj.squeeze(1) for attn_adj in torch.split(attn_tensor, 1, dim=1)]
-                    attn_adj_list, outputs, src_mask = self.layers[i](attn_adj_list, outputs, src_mask_combined)
+                    attn_adj_list, outputs, src_mask = self.layers[i](attn_adj_list, outputs, src_mask)
 
                     if i%2 !=0:
                         layer_list.append(outputs)
-
-
-            # label_outputs = outputs[:,inputs.size(1): inputs.size(1) + inputs_label.size(1),:]
-            # label_masks = src_mask_combined[:,:,inputs.size(1): inputs.size(1) + inputs_label.size(1)]
-            # label_masks = label_masks.reshape([label_masks.size(0), label_masks.size(2), label_masks.size(1)])
 
             aggregate_out = torch.cat(layer_list, dim=2)
 
             dcgcn_output = self.aggregate_W(aggregate_out)
 
-            mask_out = src_mask_combined.reshape([src_mask_combined.size(0), src_mask_combined.size(2), src_mask_combined.size(1)])
+            mask_out = src_mask.reshape([src_mask.size(0), src_mask.size(2), src_mask.size(1)])
 
-            return dcgcn_output, mask_out, layer_list, src_mask_input
+
+            layer_label_list = []
+            label_outputs = gcn_inputs_label
+
+            for i in range(len(self.layers)):
+                if i < 4:
+
+                    attn_adj_label_list, label_outputs, src_mask_label = self.layers[i](attn_adj_label_list, label_outputs, src_mask_label)
+                    if i==0:
+                        src_mask_label_input = src_mask_label
+                    if i%2 !=0:
+                        layer_label_list.append(label_outputs)
+
+                else:
+                    attn_label_tensor = self.attn(label_outputs, label_outputs, src_mask_label)
+                    attn_adj_label_list = [attn_label_adj.squeeze(1) for attn_label_adj in torch.split(attn_label_tensor, 1, dim=1)]
+                    attn_adj_label_list, label_outputs, src_mask_label = self.layers[i](attn_adj_label_list, label_outputs, src_mask_label)
+
+                    if i%2 !=0:
+                        layer_label_list.append(label_outputs)
+
+            aggregate_out_label = torch.cat(layer_label_list, dim=2)
+
+            dcgcn_output_label = self.aggregate_W(aggregate_out_label)
+
+            mask_out_label = src_mask_label.reshape([src_mask_label.size(0), src_mask_label.size(2), src_mask_label.size(1)])
+
+            return dcgcn_output, mask_out, layer_list, src_mask_input, dcgcn_output_label, mask_out_label, layer_label_list, src_mask_label_input
+            #########################################################
+            # src_mask_combined = torch.cat([src_mask, src_mask_label], dim=2)
+            #
+            # for i in range(len(self.layers)):
+            #     if i < 4:
+            #
+            #         attn_adj_list, outputs, src_mask_combined = self.layers[i](attn_adj_list, outputs, src_mask_combined)
+            #         if i==0:
+            #             src_mask_input = src_mask_combined
+            #         if i%2 !=0:
+            #             layer_list.append(outputs)
+            #
+            #     else:
+            #         attn_tensor = self.attn(outputs, outputs, src_mask_combined)
+            #         attn_adj_list = [attn_adj.squeeze(1) for attn_adj in torch.split(attn_tensor, 1, dim=1)]
+            #         attn_adj_list, outputs, src_mask = self.layers[i](attn_adj_list, outputs, src_mask_combined)
+            #
+            #         if i%2 !=0:
+            #             layer_list.append(outputs)
+            #
+            #
+            # # label_outputs = outputs[:,inputs.size(1): inputs.size(1) + inputs_label.size(1),:]
+            # # label_masks = src_mask_combined[:,:,inputs.size(1): inputs.size(1) + inputs_label.size(1)]
+            # # label_masks = label_masks.reshape([label_masks.size(0), label_masks.size(2), label_masks.size(1)])
+            #
+            # aggregate_out = torch.cat(layer_list, dim=2)
+            #
+            # dcgcn_output = self.aggregate_W(aggregate_out)
+            #
+            # mask_out = src_mask_combined.reshape([src_mask_combined.size(0), src_mask_combined.size(2), src_mask_combined.size(1)])
+            #
+            # return dcgcn_output, mask_out, layer_list, src_mask_input
+            #########################################################
 
         else:
 
@@ -785,36 +836,65 @@ class GGG(nn.Module):
     def forward(self, x, adj, mask=None, label=None, adj_label=None):
         B, T_x, C = x.size()  # 假设x的形状是(B, T_x, C)
         if label is not None:
-            B_label, T_label, C_label = label.size()  # 假设label的形状是(B, T_label, C_label)
 
-            # 确保x和label的batch size一致，并准备合并
-            assert B == B_label, "Batch sizes of x and label must match."
-
-            # 拼接x和label在时间序列维度（假设沿着第二个维度拼接）
-            combined = torch.cat((x, label), dim=1)  # 形状变为(B, T_x + T_label, C)
-            combined_T = T_x + T_label
-
-            # 使用更新后的数据进行池化等操作
-            combined_pooled = self.pool_X(combined)
-            combined_new = torch.cat([combined_pooled, combined], dim=2)
-            combined_new = self.transform(combined_new)
-            combined_new = self.dropout(combined_new)
-
-            # 计算合并后特征的高斯分布参数
-            gauss_parameters = self.gauss(combined_new)
+            # 如果没有label，则保持原有逻辑处理x
+            x_pooled = self.pool_X(x)
+            x_new = torch.cat([x_pooled, x], dim=2)
+            x_new = self.transform(x_new)
+            x_new = self.dropout(x_new)
+            gauss_parameters = self.gauss(x_new)
             gauss_mean, gauss_std = gauss_parameters[:,:,:self.num_heads], F.softplus(gauss_parameters[:,:,self.num_heads:])
-
-            # 计算注意力图
-            kl_div = kl_div_gauss(gauss_mean.unsqueeze(1).repeat(1,combined_T,1,1),
-                                  gauss_mean.unsqueeze(2).repeat(1,1,combined_T,1),
-                                  gauss_std.unsqueeze(1).repeat(1,combined_T,1,1),
-                                  gauss_std.unsqueeze(2).repeat(1,1,combined_T,1))
+            kl_div = kl_div_gauss(gauss_mean.unsqueeze(1).repeat(1,T_x,1,1),gauss_mean.unsqueeze(2).repeat(1,1,T_x,1),gauss_std.unsqueeze(1).repeat(1,T_x,1,1),gauss_std.unsqueeze(2).repeat(1,1,T_x,1))
             adj_multi = kl_div
-
-            # 分割注意力图
             attn_adj_list = [attn_adj.squeeze(3) for attn_adj in torch.split(adj_multi, 1, dim=3)]
 
-            return combined_new, attn_adj_list
+            B_label, T_label, C_label = label.size()  # 假设x的形状是(B, T_x, C)
+            label_pooled = self.pool_X(label)
+            label_new = torch.cat([label_pooled, label], dim=2)
+            label_new = self.transform(label_new)
+            label_new = self.dropout(label_new)
+            gauss_parameters_label = self.gauss(label_new)
+            gauss_mean_label, gauss_std_label = gauss_parameters_label[:,:,:self.num_heads], F.softplus(gauss_parameters_label[:,:,self.num_heads:])
+            kl_div_label = kl_div_gauss(gauss_mean_label.unsqueeze(1).repeat(1,T_label,1,1),gauss_mean_label.unsqueeze(2).repeat(1,1,T_label,1),gauss_std_label.unsqueeze(1).repeat(1,T_label,1,1),gauss_std_label.unsqueeze(2).repeat(1,1,T_label,1))
+            adj_multi_label = kl_div_label
+            attn_adj_label_list = [attn_adj_label.squeeze(3) for attn_adj_label in torch.split(adj_multi_label, 1, dim=3)]
+
+
+            return x_new, attn_adj_list, label_new, attn_adj_label_list
+
+
+            #####################################################
+            # B_label, T_label, C_label = label.size()  # 假设label的形状是(B, T_label, C_label)
+            #
+            # # 确保x和label的batch size一致，并准备合并
+            # assert B == B_label, "Batch sizes of x and label must match."
+            #
+            # # 拼接x和label在时间序列维度（假设沿着第二个维度拼接）
+            # combined = torch.cat((x, label), dim=1)  # 形状变为(B, T_x + T_label, C)
+            # combined_T = T_x + T_label
+            #
+            # # 使用更新后的数据进行池化等操作
+            # combined_pooled = self.pool_X(combined)
+            # combined_new = torch.cat([combined_pooled, combined], dim=2)
+            # combined_new = self.transform(combined_new)
+            # combined_new = self.dropout(combined_new)
+            #
+            # # 计算合并后特征的高斯分布参数
+            # gauss_parameters = self.gauss(combined_new)
+            # gauss_mean, gauss_std = gauss_parameters[:,:,:self.num_heads], F.softplus(gauss_parameters[:,:,self.num_heads:])
+            #
+            # # 计算注意力图
+            # kl_div = kl_div_gauss(gauss_mean.unsqueeze(1).repeat(1,combined_T,1,1),
+            #                       gauss_mean.unsqueeze(2).repeat(1,1,combined_T,1),
+            #                       gauss_std.unsqueeze(1).repeat(1,combined_T,1,1),
+            #                       gauss_std.unsqueeze(2).repeat(1,1,combined_T,1))
+            # adj_multi = kl_div
+            #
+            # # 分割注意力图
+            # attn_adj_list = [attn_adj.squeeze(3) for attn_adj in torch.split(adj_multi, 1, dim=3)]
+            #
+            # return combined_new, attn_adj_list
+            #####################################################
         else:
             # 如果没有label，则保持原有逻辑处理x
             x_pooled = self.pool_X(x)
@@ -838,11 +918,12 @@ class BertForSequenceClassification(nn.Module):
         self.gcn = PoolGCN(config, args)
 
 
-        self.fc = nn.Linear(config.hidden_size + args.graph_hidden_size, config.hidden_size)
-        # self.classifier = nn.Linear(config.hidden_size + args.graph_hidden_size, num_labels * 36)
-        self.classifier = nn.Linear(config.hidden_size, num_labels * 36)
+        # self.fc = nn.Linear(config.hidden_size + args.graph_hidden_size, config.hidden_size)
+        self.classifier = nn.Linear(config.hidden_size + args.graph_hidden_size, num_labels * 36)
+        # self.classifier = nn.Linear(config.hidden_size, num_labels * 36)
+        self.classifier_label = nn.Linear(config.hidden_size + args.graph_hidden_size, num_labels * 36)
 
-        self.tran_layer = nn.Linear(args.graph_hidden_size, config.hidden_size)
+        # self.tran_layer = nn.Linear(args.graph_hidden_size, config.hidden_size)
 
         self.atten_layer = AttentionLayer(config.hidden_size)
 
@@ -900,7 +981,8 @@ class BertForSequenceClassification(nn.Module):
             word_embedding_label = word_embedding_label[:,:real_length_label]
 
         if is_training:
-            h, pool_mask, layer_list, src_mask_input = self.gcn(adj, word_embedding, input_ids.view(-1, seq_length), adj_label, word_embedding_label, input_truelabel_ids.view(-1, seq_length))
+            h, pool_mask, layer_list, src_mask_input, h_label, pool_mask_label, layer_list_label, src_mask_input_label = self.gcn(adj, word_embedding, input_ids.view(-1, seq_length), adj_label, word_embedding_label, input_truelabel_ids.view(-1, seq_length))
+            # h, pool_mask, layer_list, src_mask_input = self.gcn(adj, word_embedding, input_ids.view(-1, seq_length), adj_label, word_embedding_label, input_truelabel_ids.view(-1, seq_length))
         else:
             h, pool_mask,layer_list, src_mask_input = self.gcn(adj, word_embedding,input_ids.view(-1,seq_length))
 
@@ -908,14 +990,20 @@ class BertForSequenceClassification(nn.Module):
         h_out = pool(h, pool_mask, type="max")
 
         output = self.dropout(torch.cat([pooled_output,h_out],dim=1))
-        output = self.fc(output)
-        output = self.dropout(output)
+        # output = torch.cat([pooled_output,h_out],dim=1)
         logits = self.classifier(output)
         logits = logits.view(-1, 36)
 
 
         if is_training:
-            label_out = self.tran_layer(h_out)
+            h_out_label = pool(h_label, pool_mask_label, type="max")
+
+            # output = self.dropout(torch.cat([pooled_output,h_out],dim=1))
+            output_label = self.dropout(torch.cat([pooled_output_truelabel,h_out_label],dim=1))
+            logits_label = self.classifier_label(output_label)
+            logits_label = logits_label.view(-1, 36)
+
+            # label_out = self.tran_layer(h_out)
             output_cls_label, _ = self.atten_layer(pooled_output_truelabel, pooled_output)
 
 
@@ -928,7 +1016,8 @@ class BertForSequenceClassification(nn.Module):
             loss = loss_fct(logits, labels)
 
             if is_training:
-                label_gnn_loss = self.args.label_lamda * loss_MSE(label_out, pooled_output_truelabel)
+                # label_gnn_loss = self.args.label_lamda * loss_MSE(label_out, pooled_output_truelabel)
+                label_gnn_loss = self.args.label_lamda * loss_fct(logits_label, labels)
                 cls_label_loss = self.args.cls_label_lamda * loss_MSE(output_cls_label, pooled_output_truelabel)
 
                 loss = loss + label_gnn_loss + cls_label_loss
