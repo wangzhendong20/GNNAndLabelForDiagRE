@@ -918,14 +918,12 @@ class BertForSequenceClassification(nn.Module):
         self.gcn = PoolGCN(config, args)
 
 
-        # self.fc = nn.Linear(config.hidden_size + args.graph_hidden_size, config.hidden_size)
         self.classifier = nn.Linear(config.hidden_size + args.graph_hidden_size, num_labels * 36)
-        # self.classifier = nn.Linear(config.hidden_size, num_labels * 36)
         self.classifier_label = nn.Linear(config.hidden_size + args.graph_hidden_size, num_labels * 36)
-
-        # self.tran_layer = nn.Linear(args.graph_hidden_size, config.hidden_size)
+        # self.fc_graph_classifier = nn.Linear(args.graph_hidden_size, num_labels * 36)
 
         self.atten_layer = AttentionLayer(config.hidden_size)
+        self.atten_layer_graph = AttentionLayer(args.graph_hidden_size)
 
         def init_weights(module):
             if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -989,8 +987,10 @@ class BertForSequenceClassification(nn.Module):
 
         h_out = pool(h, pool_mask, type="max")
 
-        output = self.dropout(torch.cat([pooled_output,h_out],dim=1))
-        # output = torch.cat([pooled_output,h_out],dim=1)
+        # output = self.dropout(torch.cat([pooled_output,h_out],dim=1))
+        output = torch.cat([pooled_output,h_out],dim=1)
+        if is_training:
+            output = self.dropout(output)
         logits = self.classifier(output)
         logits = logits.view(-1, 36)
 
@@ -998,12 +998,20 @@ class BertForSequenceClassification(nn.Module):
         if is_training:
             h_out_label = pool(h_label, pool_mask_label, type="max")
 
-            # output = self.dropout(torch.cat([pooled_output,h_out],dim=1))
-            output_label = self.dropout(torch.cat([pooled_output_truelabel,h_out_label],dim=1))
+            # v3
+            graph_label_output, _ = self.atten_layer_graph(h_out, h_out_label)
+            output_label = torch.cat([pooled_output_truelabel,graph_label_output],dim=1)
+            output_label = self.dropout(output_label)
             logits_label = self.classifier_label(output_label)
             logits_label = logits_label.view(-1, 36)
+            ##
 
-            # label_out = self.tran_layer(h_out)
+            # 和x_input一样的逻辑  v2
+            # output_label = torch.cat([pooled_output_truelabel,h_out_label],dim=1)
+            # logits_label = self.classifier_label(output_label)
+            # logits_label = logits_label.view(-1, 36)
+            #
+
             output_cls_label, _ = self.atten_layer(pooled_output_truelabel, pooled_output)
 
 
@@ -1016,7 +1024,6 @@ class BertForSequenceClassification(nn.Module):
             loss = loss_fct(logits, labels)
 
             if is_training:
-                # label_gnn_loss = self.args.label_lamda * loss_MSE(label_out, pooled_output_truelabel)
                 label_gnn_loss = self.args.label_lamda * loss_fct(logits_label, labels)
                 cls_label_loss = self.args.cls_label_lamda * loss_MSE(output_cls_label, pooled_output_truelabel)
 

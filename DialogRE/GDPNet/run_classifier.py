@@ -19,6 +19,7 @@ from modeling import BertConfig, BertForSequenceClassification
 from optimization import BERTAdam
 import json
 import re
+import time
 
 n_class = 1
 reverse_order = False
@@ -719,7 +720,7 @@ def main():
                         type=int,
                         help="Total batch size for training.")
     parser.add_argument("--eval_batch_size",
-                        default=16,
+                        default=128,
                         type=int,
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate",
@@ -1093,10 +1094,12 @@ def main():
 
             if args.f1eval:
                 if eval_f1 >= best_metric:
+                    print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
                     torch.save(model.state_dict(), os.path.join(args.output_dir, "model_best.pt"))
                     best_metric = eval_f1
             else:
                 if eval_accuracy >= best_metric:
+                    print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
                     torch.save(model.state_dict(), os.path.join(args.output_dir, "model_best.pt"))
                     best_metric = eval_accuracy
 
